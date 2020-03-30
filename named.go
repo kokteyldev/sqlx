@@ -188,7 +188,11 @@ func bindMapArgs(names []string, arg map[string]interface{}) ([]interface{}, err
 		if !ok {
 			return arglist, fmt.Errorf("could not find name %s in %#v", name, arg)
 		}
-		arglist = append(arglist, val)
+		nArg := sql.NamedArg{
+			Name:  name,
+			Value: val,
+		}
+		arglist = append(arglist, nArg)
 	}
 	return arglist, nil
 }
@@ -290,6 +294,7 @@ var allowedBindRunes = []*unicode.RangeTable{unicode.Letter, unicode.Digit}
 // a list of names.
 func compileNamedQuery(qs []byte, bindType int) (query string, names []string, err error) {
 	names = make([]string, 0, 10)
+	nameMap := make(map[string]bool)
 	rebound := make([]byte, 0, len(qs))
 
 	inName := false
@@ -328,13 +333,21 @@ func compileNamedQuery(qs []byte, bindType int) (query string, names []string, e
 				name = append(name, b)
 			}
 			// add the string representation to the names list
-			names = append(names, string(name))
+			nameStr := string(name)
+			if bindType != NAMED {
+				names = append(names, nameStr)
+			}
+
 			// add a proper bindvar for the bindType
 			switch bindType {
 			// oracle only supports named type bind vars even for positional
 			case NAMED:
 				rebound = append(rebound, ':')
 				rebound = append(rebound, name...)
+				if _, ok := nameMap[nameStr]; !ok {
+					names = append(names, nameStr)
+					nameMap[nameStr] = true
+				}
 			case QUESTION, UNKNOWN:
 				rebound = append(rebound, '?')
 			case DOLLAR:
